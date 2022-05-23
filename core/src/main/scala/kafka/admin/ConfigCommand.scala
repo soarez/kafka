@@ -918,6 +918,7 @@ object ConfigCommand extends Logging {
 
       if (hasEntityName && entityTypeVals.contains(ConfigType.Ip)) {
         Seq(entityName, ip).filter(options.has(_)).map(options.valueOf(_)).foreach { ipEntity =>
+          println(s"==============> VALIDATING TF OUT OF ${ipEntity}")
           if (!DynamicConfig.Ip.isValidIpEntity(ipEntity))
             throw new IllegalArgumentException(s"The entity name for ${entityTypeVals.head} must be a valid IP or resolvable host, but it is: $ipEntity")
         }
