@@ -39,10 +39,10 @@ import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{BrokerNotAvailableException, ControllerMovedException, StaleBrokerEpochException}
 import org.apache.kafka.common.feature.{Features, FinalizedVersionRange}
-import org.apache.kafka.common.message.{AllocateProducerIdsRequestData, AllocateProducerIdsResponseData, AlterPartitionRequestData, AlterPartitionResponseData}
+import org.apache.kafka.common.message.{AllocateProducerIdsRequestData, AllocateProducerIdsResponseData, AlterPartitionRequestData, AlterPartitionResponseData, AssignReplicasToDirectoriesResponseData}
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.requests.{AbstractControlRequest, ApiError, LeaderAndIsrResponse, UpdateFeaturesRequest, UpdateMetadataResponse}
+import org.apache.kafka.common.requests.{AbstractControlRequest, ApiError, AssignReplicasToDirectoriesRequest, LeaderAndIsrResponse, UpdateFeaturesRequest, UpdateMetadataResponse}
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.apache.kafka.metadata.LeaderRecoveryState
 import org.apache.kafka.server.common.ProducerIdsBlock
@@ -2484,6 +2484,21 @@ class KafkaController(val config: KafkaConfig,
       case Failure(exception) => callback.apply(Left(Errors.forException(exception)))
       case Success(newProducerIdBlock) => callback.apply(Right(newProducerIdBlock))
     }
+  }
+
+  def assignReplicasToDirectories(
+    request: AssignReplicasToDirectoriesRequest,
+    callback: AssignReplicasToDirectoriesResponseData => Unit
+  ): Unit = {
+    val data = request.data()
+    val brokerId = data.brokerId()
+    val brokerEpoch = data.brokerEpoch()
+    val directories = data.directories()
+
+    def responseCallback(): Unit = {
+
+    }
+//    eventManager.put(AssignReplicasToDirectoriesReceived(brokerId, brokerEpoch, directories, responseCallback))
   }
 
   private def processControllerChange(): Unit = {

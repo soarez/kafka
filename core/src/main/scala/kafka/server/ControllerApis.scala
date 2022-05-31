@@ -79,16 +79,16 @@ class ControllerApis(val requestChannel: RequestChannel,
   override def handle(request: RequestChannel.Request, requestLocal: RequestLocal): Unit = {
     try {
       request.header.apiKey match {
-        case ApiKeys.FETCH => handleFetch(request)
-        case ApiKeys.FETCH_SNAPSHOT => handleFetchSnapshot(request)
+        case ApiKeys.FETCH => handleFetch(request)                                  // Raft request
+        case ApiKeys.FETCH_SNAPSHOT => handleFetchSnapshot(request)                 // Raft request
         case ApiKeys.CREATE_TOPICS => handleCreateTopics(request)
         case ApiKeys.DELETE_TOPICS => handleDeleteTopics(request)
         case ApiKeys.API_VERSIONS => handleApiVersionsRequest(request)
         case ApiKeys.ALTER_CONFIGS => handleLegacyAlterConfigs(request)
-        case ApiKeys.VOTE => handleVote(request)
-        case ApiKeys.BEGIN_QUORUM_EPOCH => handleBeginQuorumEpoch(request)
-        case ApiKeys.END_QUORUM_EPOCH => handleEndQuorumEpoch(request)
-        case ApiKeys.DESCRIBE_QUORUM => handleDescribeQuorum(request)
+        case ApiKeys.VOTE => handleVote(request)                                    // Raft request
+        case ApiKeys.BEGIN_QUORUM_EPOCH => handleBeginQuorumEpoch(request)          // Raft request
+        case ApiKeys.END_QUORUM_EPOCH => handleEndQuorumEpoch(request)              // Raft request
+        case ApiKeys.DESCRIBE_QUORUM => handleDescribeQuorum(request)               // Raft request
         case ApiKeys.ALTER_PARTITION => handleAlterPartitionRequest(request)
         case ApiKeys.BROKER_REGISTRATION => handleBrokerRegistration(request)
         case ApiKeys.BROKER_HEARTBEAT => handleBrokerHeartBeatRequest(request)
@@ -107,6 +107,7 @@ class ControllerApis(val requestChannel: RequestChannel,
         case ApiKeys.DELETE_ACLS => aclApis.handleDeleteAcls(request)
         case ApiKeys.ELECT_LEADERS => handleElectLeaders(request)
         case ApiKeys.UPDATE_FEATURES => handleUpdateFeatures(request)
+        case ApiKeys.ASSIGN_REPLICAS_TO_DIRECTORIES => handleAssignReplicasToDirectories(request)
         case _ => throw new ApiException(s"Unsupported ApiKey ${request.context.header.apiKey}")
       }
     } catch {
@@ -825,5 +826,20 @@ class ControllerApis(val requestChannel: RequestChannel,
             new UpdateFeaturesResponse(response.setThrottleTimeMs(requestThrottleMs)))
         }
       })
+  }
+
+  def handleAssignReplicasToDirectories(request: RequestChannel.Request): Unit = {
+    val assignReplicasToDirectoriesRequest = request.body[AssignReplicasToDirectoriesRequest]
+    authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+    val context = new ControllerRequestContext(request.context.principal, OptionalLong.empty())
+    val future = controller.assignReplicasToDirectories(context, assignReplicasToDirectoriesRequest.data)
+    future.whenComplete { (result, exception) =>
+      val response = if (exception != null) {
+        assignReplicasToDirectoriesRequest.getErrorResponse(exception)
+      } else {
+        new AssignReplicasToDirectoriesResponse(result)
+      }
+      requestHelper.sendResponseExemptThrottle(request, response)
+    }
   }
 }

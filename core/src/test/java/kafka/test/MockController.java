@@ -29,6 +29,8 @@ import org.apache.kafka.common.message.AlterPartitionRequestData;
 import org.apache.kafka.common.message.AlterPartitionResponseData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsRequestData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesRequestData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesResponseData;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.message.BrokerRegistrationRequestData;
 import org.apache.kafka.common.message.CreatePartitionsRequestData.CreatePartitionsTopic;
@@ -114,6 +116,11 @@ public class MockController implements Controller {
             topics.put(topic.id, topic);
             topicNameToId.put(topic.name, topic.id);
         }
+    }
+
+    @Override
+    public CompletableFuture<AssignReplicasToDirectoriesResponseData> assignReplicasToDirectories(ControllerRequestContext context, AssignReplicasToDirectoriesRequestData request) {
+        throw new UnsupportedOperationException();
     }
 
     @Override

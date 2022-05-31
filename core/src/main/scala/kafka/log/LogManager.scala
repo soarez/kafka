@@ -70,6 +70,7 @@ class LogManager(logDirs: Seq[File],
                  scheduler: Scheduler,
                  brokerTopicStats: BrokerTopicStats,
                  logDirFailureChannel: LogDirFailureChannel,
+//                 logDirEventManager: LogDirEventManager,
                  time: Time,
                  val keepPartitionMetadataFile: Boolean) extends Logging with KafkaMetricsGroup {
 
@@ -900,6 +901,11 @@ class LogManager(logDirs: Seq[File],
         else
           currentLogs.put(topicPartition, log)
 
+        if (isNew && !isFuture) {
+//          logDirEventManager.replicaAssignedToLogDirectory(topicPartition, logDirIdToUid(logDir))
+          // how do we cover the case when the future replicas become non future replicas
+        }
+
         info(s"Created log for partition $topicPartition in $logDir with properties ${config.overriddenConfigsAsLoggableString}")
         // Remove the preferred log dir since it has already been satisfied
         preferredLogDirs.remove(topicPartition)
@@ -921,6 +927,10 @@ class LogManager(logDirs: Seq[File],
       }
       log
     }
+  }
+
+  private def logDirIdToUid(logDir: File): Uuid = {
+    ??? // TODO Implement
   }
 
   private[log] def createLogDirectory(logDir: File, logDirName: String): Try[File] = {
@@ -1293,6 +1303,7 @@ object LogManager {
             time: Time,
             brokerTopicStats: BrokerTopicStats,
             logDirFailureChannel: LogDirFailureChannel,
+            logDirEventManager: LogDirEventManager,
             keepPartitionMetadataFile: Boolean): LogManager = {
     val defaultProps = LogConfig.extractLogConfigMap(config)
 
@@ -1316,6 +1327,7 @@ object LogManager {
       scheduler = kafkaScheduler,
       brokerTopicStats = brokerTopicStats,
       logDirFailureChannel = logDirFailureChannel,
+//      logDirEventManager = logDirEventManager,
       time = time,
       keepPartitionMetadataFile = keepPartitionMetadataFile,
       interBrokerProtocolVersion = config.interBrokerProtocolVersion)

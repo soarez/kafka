@@ -43,6 +43,8 @@ import org.apache.kafka.common.message.AlterPartitionReassignmentsRequestData.Re
 import org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData.ReassignablePartitionResponse;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData.ReassignableTopicResponse;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesRequestData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesResponseData;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.message.CreatePartitionsRequestData.CreatePartitionsAssignment;
 import org.apache.kafka.common.message.CreatePartitionsRequestData.CreatePartitionsTopic;
@@ -879,6 +881,39 @@ public class ReplicationControlManager {
     // VisibleForTesting
     Set<TopicIdPartition> imbalancedPartitions() {
         return new HashSet<>(imbalancedPartitions);
+    }
+
+    ControllerResult<AssignReplicasToDirectoriesResponseData> assignReplicasToDirectories(AssignReplicasToDirectoriesRequestData request) {
+        clusterControl.checkBrokerEpoch(request.brokerId(), request.brokerEpoch());
+        AssignReplicasToDirectoriesResponseData response = new AssignReplicasToDirectoriesResponseData();
+        List<ApiMessageAndVersion> records = new ArrayList<>();
+
+        for (AssignReplicasToDirectoriesRequestData.DirectoryData reqDirectory : request.directories()) {
+            AssignReplicasToDirectoriesResponseData.DirectoryData resDirectory =
+                    new AssignReplicasToDirectoriesResponseData.DirectoryData().setId(reqDirectory.id());
+            for (AssignReplicasToDirectoriesRequestData.TopicData reqTopic : reqDirectory.topics()) {
+                AssignReplicasToDirectoriesResponseData.TopicData resTopic =
+                        new AssignReplicasToDirectoriesResponseData.TopicData().setName(reqTopic.name());
+                Uuid topicId = topicsByName.get(reqTopic.name());
+                for (AssignReplicasToDirectoriesRequestData.PartitionData reqPartition : reqTopic.partitions()) {
+                    Errors errors = NONE;
+                    if (topicId == null || !topics.containsKey(topicId) || topics.get(topicId).parts.get(reqPartition.partitionIndex()) == null) {
+                        errors = UNKNOWN_TOPIC_OR_PARTITION;
+                    } else {
+                        // TODO append the record
+
+                    }
+                    resTopic.partitions().add(
+                            new AssignReplicasToDirectoriesResponseData.PartitionData()
+                                    .setPartitionIndex(reqPartition.partitionIndex())
+                                    .setErrorCode(errors.code())
+                    );
+                }
+                resDirectory.topics().add(resTopic);
+            }
+            response.directories().add(resDirectory);
+        }
+        return ControllerResult.of(records, response);
     }
 
     ControllerResult<AlterPartitionResponseData> alterPartition(AlterPartitionRequestData request) {

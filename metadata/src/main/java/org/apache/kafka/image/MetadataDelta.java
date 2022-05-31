@@ -206,6 +206,9 @@ public final class MetadataDelta {
             case REMOVE_ACCESS_CONTROL_ENTRY_RECORD:
                 replay((RemoveAccessControlEntryRecord) record);
                 break;
+            case ASSIGN_REPLICA_TO_LOG_DIRECTORY_RECORD:
+                replay((AssignReplicaToLogDirectoryRecord) record);
+                break;
             default:
                 throw new RuntimeException("Unknown metadata record type " + type);
         }

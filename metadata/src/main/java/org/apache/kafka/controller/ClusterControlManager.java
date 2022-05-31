@@ -24,6 +24,7 @@ import org.apache.kafka.common.errors.InconsistentClusterIdException;
 import org.apache.kafka.common.errors.StaleBrokerEpochException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.message.BrokerRegistrationRequestData;
+import org.apache.kafka.common.metadata.AssignReplicaToLogDirectoryRecord;
 import org.apache.kafka.common.metadata.FenceBrokerRecord;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord;
 import org.apache.kafka.common.metadata.RegisterBrokerRecord.BrokerEndpoint;
@@ -428,6 +429,24 @@ public class ClusterControlManager {
                 readyBrokersFuture.get().future.complete(null);
                 readyBrokersFuture = Optional.empty();
             }
+        }
+    }
+
+    public void replay(AssignReplicaToLogDirectoryRecord record) {
+        int brokerId = record.brokerId();
+        BrokerRegistration registration = brokerRegistrations.get(brokerId);
+        if (registration == null) {
+            throw new RuntimeException(String.format("Unable to replay %s: no broker " +
+                    "registration found for that id", record));
+        } else if (registration.epoch() !=  record.epoch()) {
+            throw new RuntimeException(String.format("Unable to replay %s: no broker " +
+                    "registration with that epoch found", record));
+        } else {
+            if (heartbeatManager != null) heartbeatManager.register(brokerId, false);
+
+            // TODO replay
+
+            log.info("Assigned replica to directory: {}", record);
         }
     }
 

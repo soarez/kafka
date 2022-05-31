@@ -148,7 +148,10 @@ public enum MetadataVersion {
     IBP_3_1_IV0(3, "3.1", "IV0"),
 
     // Support for leader recovery for unclean leader election (KIP-704)
-    IBP_3_2_IV0(4, "3.2", "IV0");
+    IBP_3_2_IV0(4, "3.2", "IV0"),
+
+    // Support for log directory failure RPCs (KIP-###) TODO
+    IBP_3_2_IV1(5, "3.2", "IV1");
 
     public static final MetadataVersion[] VALUES = MetadataVersion.values();
     private final Optional<Short> featureLevel;
@@ -201,6 +204,9 @@ public enum MetadataVersion {
         return this.isAtLeast(IBP_3_0_IV0);
     }
 
+    public boolean isAssignReplicaToDirectoriesSupported() {
+        return this.isAtLeast(IBP_3_2_IV1);
+    }
 
     public RecordVersion highestSupportedRecordVersion() {
         if (this.isLessThan(IBP_0_10_0_IV0)) {

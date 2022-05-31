@@ -233,6 +233,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.LIST_TRANSACTIONS => handleListTransactionsRequest(request)
         case ApiKeys.ALLOCATE_PRODUCER_IDS => handleAllocateProducerIdsRequest(request)
         case ApiKeys.DESCRIBE_QUORUM => forwardToControllerOrFail(request)
+        case ApiKeys.ASSIGN_REPLICAS_TO_DIRECTORIES => maybeForwardToController(request, handleAssignReplicasToDirectoriesRequest)
         case _ => throw new IllegalStateException(s"No handler for request api key ${request.header.apiKey}")
       }
     } catch {
@@ -3523,6 +3524,30 @@ class KafkaApis(val requestChannel: RequestChannel,
       zkSupport.controller.allocateProducerIds(allocateProducerIdsRequest.data, producerIdsResponse =>
         requestHelper.sendResponseMaybeThrottle(request, throttleTimeMs =>
           new AllocateProducerIdsResponse(producerIdsResponse.setThrottleTimeMs(throttleTimeMs)))
+      )
+  }
+
+  def handleAssignReplicasToDirectoriesRequest(request: RequestChannel.Request): Unit = {
+    val zkSupport = metadataSupport.requireZkOrThrow(KafkaApis.shouldNeverReceive(request))
+    authHelper.authorizeClusterOperation(request, CLUSTER_ACTION)
+
+    val assignReplicasToDirectoriesRequest = request.body[AssignReplicasToDirectoriesRequest]
+
+    if (!zkSupport.controller.isActive) {
+      requestHelper.sendResponseExemptThrottle(
+        request,
+        assignReplicasToDirectoriesRequest.getErrorResponse(
+          AbstractResponse.DEFAULT_THROTTLE_TIME,
+          Errors.NOT_CONTROLLER.exception
+        )
+      )
+    }
+    else
+      zkSupport.controller.assignReplicasToDirectories(
+        assignReplicasToDirectoriesRequest,
+        assignReplicasToDirectoriesResponseData =>
+        requestHelper.sendResponseMaybeThrottle(request, throttleTimeMs =>
+          new AssignReplicasToDirectoriesResponse(assignReplicasToDirectoriesResponseData))
       )
   }
 

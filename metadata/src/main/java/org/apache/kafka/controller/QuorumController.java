@@ -35,6 +35,8 @@ import org.apache.kafka.common.message.AlterPartitionRequestData;
 import org.apache.kafka.common.message.AlterPartitionResponseData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsRequestData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesRequestData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesResponseData;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.message.BrokerRegistrationRequestData;
 import org.apache.kafka.common.message.CreatePartitionsRequestData.CreatePartitionsTopic;
@@ -48,6 +50,7 @@ import org.apache.kafka.common.message.ListPartitionReassignmentsResponseData;
 import org.apache.kafka.common.message.UpdateFeaturesRequestData;
 import org.apache.kafka.common.message.UpdateFeaturesResponseData;
 import org.apache.kafka.common.metadata.AccessControlEntryRecord;
+import org.apache.kafka.common.metadata.AssignReplicaToLogDirectoryRecord;
 import org.apache.kafka.common.metadata.ConfigRecord;
 import org.apache.kafka.common.metadata.ClientQuotaRecord;
 import org.apache.kafka.common.metadata.FeatureLevelRecord;
@@ -1121,6 +1124,9 @@ public final class QuorumController implements Controller {
                 case REMOVE_ACCESS_CONTROL_ENTRY_RECORD:
                     aclControlManager.replay((RemoveAccessControlEntryRecord) message, snapshotId);
                     break;
+                case ASSIGN_REPLICA_TO_LOG_DIRECTORY_RECORD:
+                    clusterControl.replay((AssignReplicaToLogDirectoryRecord) message);
+                    break;
                 default:
                     throw new RuntimeException("Unhandled record type " + type);
             }
@@ -1751,6 +1757,15 @@ public final class QuorumController implements Controller {
     ) {
         return appendWriteEvent("deleteAcls", context.deadlineNs(),
             () -> aclControlManager.deleteAcls(filters));
+    }
+
+    @Override
+    public CompletableFuture<AssignReplicasToDirectoriesResponseData> assignReplicasToDirectories(ControllerRequestContext context, AssignReplicasToDirectoriesRequestData request) {
+        if (request.directories().isEmpty()) {
+            return CompletableFuture.completedFuture(new AssignReplicasToDirectoriesResponseData());
+        }
+        return appendWriteEvent("assignReplicasToDirectories", context.deadlineNs(),
+                () -> replicationControl.assignReplicasToDirectories(request));
     }
 
     @Override

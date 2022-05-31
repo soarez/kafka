@@ -109,6 +109,7 @@ class BrokerServer(
   var dataPlaneRequestHandlerPool: KafkaRequestHandlerPool = null
 
   var logDirFailureChannel: LogDirFailureChannel = null
+  var logDirEventManager: LogDirEventManager = null
   var logManager: LogManager = null
 
   var tokenManager: DelegationTokenManager = null
@@ -199,20 +200,30 @@ class BrokerServer(
 
       logDirFailureChannel = new LogDirFailureChannel(config.logDirs.size)
 
+      val controllerNodes = RaftConfig.voterConnectionsToNodes(controllerQuorumVotersFuture.get()).asScala
+      val controllerNodeProvider = RaftControllerNodeProvider(raftManager, config, controllerNodes)
+//      val logDirAssignmentChannelManager = BrokerToControllerChannelManager(
+//        controllerNodeProvider,
+//        time,
+//        metrics,
+//        config,
+//        channelName = "assignReplicaToLogDirectory",
+//        threadNamePrefix,
+//        retryTimeoutMs = Long.MaxValue
+//      )
+//      logDirEventManager = new LogDirEventManager(logDirAssignmentChannelManager)
+
       metadataCache = MetadataCache.kRaftMetadataCache(config.nodeId)
 
       // Create log manager, but don't start it because we need to delay any potential unclean shutdown log recovery
       // until we catch up on the metadata log and have up-to-date topic and broker configs.
       logManager = LogManager(config, initialOfflineDirs, metadataCache, kafkaScheduler, time,
-        brokerTopicStats, logDirFailureChannel, keepPartitionMetadataFile = true)
+        brokerTopicStats, logDirFailureChannel, logDirEventManager, keepPartitionMetadataFile = true)
 
       // Enable delegation token cache for all SCRAM mechanisms to simplify dynamic update.
       // This keeps the cache up-to-date if new SCRAM mechanisms are enabled dynamically.
       tokenCache = new DelegationTokenCache(ScramMechanism.mechanismNames)
       credentialProvider = new CredentialProvider(ScramMechanism.mechanismNames, tokenCache)
-
-      val controllerNodes = RaftConfig.voterConnectionsToNodes(controllerQuorumVotersFuture.get()).asScala
-      val controllerNodeProvider = RaftControllerNodeProvider(raftManager, config, controllerNodes)
 
       clientToControllerChannelManager = BrokerToControllerChannelManager(
         controllerNodeProvider,

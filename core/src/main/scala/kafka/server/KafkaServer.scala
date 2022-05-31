@@ -117,6 +117,7 @@ class KafkaServer(
   var controlPlaneRequestHandlerPool: KafkaRequestHandlerPool = null
 
   var logDirFailureChannel: LogDirFailureChannel = null
+  var logDirEventManager: LogDirEventManager = null
   @volatile private var _logManager: LogManager = null
 
   @volatile private var _replicaManager: ReplicaManager = null
@@ -265,6 +266,7 @@ class KafkaServer(
           time,
           brokerTopicStats,
           logDirFailureChannel,
+          logDirEventManager,
           config.usesTopicId)
         _brokerState = BrokerState.RECOVERY
         logManager.startup(zkClient.getAllTopicsInCluster())

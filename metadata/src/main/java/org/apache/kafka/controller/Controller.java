@@ -26,6 +26,8 @@ import org.apache.kafka.common.message.AlterPartitionRequestData;
 import org.apache.kafka.common.message.AlterPartitionResponseData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsRequestData;
 import org.apache.kafka.common.message.AlterPartitionReassignmentsResponseData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesRequestData;
+import org.apache.kafka.common.message.AssignReplicasToDirectoriesResponseData;
 import org.apache.kafka.common.message.BrokerHeartbeatRequestData;
 import org.apache.kafka.common.message.BrokerRegistrationRequestData;
 import org.apache.kafka.common.message.CreatePartitionsRequestData.CreatePartitionsTopic;
@@ -336,6 +338,19 @@ public interface Controller extends AclMutator, AutoCloseable {
         ControllerRequestContext context,
         List<CreatePartitionsTopic> topics,
         boolean validateOnly
+    );
+
+    /**
+     * Assign replicas to log directories, so that later, if necessary, they can be marked as failed together.
+     *
+     * @param context       The controller request context.
+     * @param request       The assign replicas to log directories request.
+     *
+     * @return              A future yielding the results.
+     */
+    CompletableFuture<AssignReplicasToDirectoriesResponseData> assignReplicasToDirectories(
+            ControllerRequestContext context,
+            AssignReplicasToDirectoriesRequestData request
     );
 
     /**
