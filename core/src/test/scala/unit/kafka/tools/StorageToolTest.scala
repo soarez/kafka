@@ -17,17 +17,19 @@
 
 package kafka.tools
 
-import java.io.{ByteArrayOutputStream, PrintStream}
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.nio.charset.{Charset, StandardCharsets}
+import java.nio.file.{Files, Paths}
 import java.util
 import java.util.Properties
-
 import kafka.server.{KafkaConfig, MetaProperties}
 import kafka.utils.TestUtils
+import org.apache.kafka.common.Uuid
 import org.apache.kafka.common.utils.Utils
 import org.junit.jupiter.api.Assertions.{assertEquals, assertThrows}
 import org.junit.jupiter.api.{Test, Timeout}
+
+import scala.util.{Success, Try}
 
 
 @Timeout(value = 40)
@@ -184,5 +186,30 @@ Found problem:
       "Input string `invalid` decoded as 5 bytes, which is not equal to the expected " +
         "16 bytes of a base64-encoded UUID", assertThrows(classOf[TerseFailure],
           () => StorageTool.buildMetadataProperties("invalid", config)).getMessage)
+  }
+
+  @Test
+  def testAssignIdToLogDirectory(): Unit = {
+    val charset: Charset = StandardCharsets.UTF_8
+    val filename = "id"
+    val metaProperties = MetaProperties(clusterId = "XcZZOzUqS4yHOjhMQB6JLQ", nodeId = 2)
+    val emptyLogDir = TestUtils.tempDir()
+    val logDirWithValidId = TestUtils.tempDir()
+    val logDirWithInvalidId = TestUtils.tempDir()
+    Files.write(Paths.get(logDirWithValidId.getPath, filename), "4tlwsn2TSMaRojv_ipIeTQ".getBytes(charset))
+    Files.write(Paths.get(logDirWithInvalidId.getPath, filename), "invalid uuid".getBytes(charset))
+    val arrayOutputStream = new ByteArrayOutputStream()
+
+    val exitCode = StorageTool.formatCommand(new PrintStream(arrayOutputStream), Seq(
+      emptyLogDir.toString,
+      logDirWithInvalidId.toString,
+      logDirWithValidId.toString,
+    ), metaProperties, MetadataVersion.latest(), ignoreFormatted = false)
+
+    assertEquals(0, exitCode, "unexpected exit code. " + new String(arrayOutputStream.toByteArray))
+    def loadUuid(dir: File) = Try(Uuid.fromString(new String(Files.readAllBytes(Paths.get(dir.getPath, "id")), charset)))
+    assert(loadUuid(emptyLogDir).isSuccess)
+    assert(loadUuid(logDirWithInvalidId).isSuccess)
+    assertEquals(Success(Uuid.fromString("4tlwsn2TSMaRojv_ipIeTQ")), loadUuid(logDirWithValidId))
   }
 }

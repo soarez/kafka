@@ -17,7 +17,7 @@
 
 package kafka.tools
 
-import java.io.PrintStream
+import java.io.{IOException, PrintStream}
 import java.nio.file.{Files, Paths}
 
 import kafka.server.{BrokerMetadataCheckpoint, KafkaConfig, MetaProperties, RawMetaProperties}
@@ -27,7 +27,9 @@ import net.sourceforge.argparse4j.impl.Arguments.{store, storeTrue}
 import org.apache.kafka.common.Uuid
 import org.apache.kafka.common.utils.Utils
 
+import java.nio.charset.StandardCharsets
 import scala.collection.mutable
+import scala.util.Try
 
 object StorageTool extends Logging {
   def main(args: Array[String]): Unit = {
@@ -233,6 +235,16 @@ object StorageTool extends Logging {
       checkpoint.write(metaProperties.toProperties)
       stream.println(s"Formatting ${directory}")
     })
+
+    // Ensure each directory has a UUID assigned
+    for (directory <- directories) {
+      val path = Paths.get(directory, "id")
+      val charset = StandardCharsets.UTF_8
+      if (!Files.exists(path) || Try(Uuid.fromString(new String(Files.readAllBytes(path), charset))).isFailure) {
+        Files.write(path, Uuid.randomUuid().toString.getBytes(charset))
+      }
+    }
+
     0
   }
 }
