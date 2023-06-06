@@ -201,6 +201,12 @@ UpdatesOnlyOfflinePartitions ==
     \* should only include partitions which exist in offline logdirs
     \A partition \in cUpdated : \E logDir \in bOffline : partition \in bLogDirs[logDir]
 
+BrokerHoldsPartitionsInASingleLogDir ==
+    \* A partition cannot be hosted in more than one log dir
+    \A logDir \in AllLogDirs :
+        \A otherLogDir \in AllLogDirs \ {logDir} :
+            bLogDirs[logDir] \intersect bLogDirs[otherLogDir] = {}
+
 \* Temporal properties
 AlwaysEventuallyControllerKnowsAssignments ==
     \* Controller's information on assignments is exactly matches actual assignments in the Broker
