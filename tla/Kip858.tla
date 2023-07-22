@@ -81,12 +81,12 @@ VARIABLES
     bLogDirs,                 \* mapping of log directory to replica set
     bPending,                 \* assignments, pending to be communicated to the Controller
     bMetadata,                \* broker's view of the assignments in the cluster metadata, updated as metadata is consumed
-    bOffline,                 \* set of logDirs known to be offline by the Broker
+    bOnline,                  \* set of logDirs which are online in the Broker
     \* Controller state
     cAssignments,             \* replica to logDir assignment
-    cOffline,                 \* set of logDirs known to be offline by the Controller
+    cOnline,                  \* set of logDirs known to be online by the Controller
     cUpdated                  \* set of partitions, for which the Controller has had a chance to issue Leadership & ISR updates due to logDir failures
-vars == <<mInflightAssignments, mInflightFailures, mNewRecords, bOffline, bLogDirs, bPending, bMetadata, cAssignments, cOffline, cUpdated>>
+vars == <<mInflightAssignments, mInflightFailures, mNewRecords, bOnline, bLogDirs, bPending, bMetadata, cAssignments, cOnline, cUpdated>>
 
 TypeOK ==
     /\ mInflightAssignments \subseteq [partition : AllPartitions, logDir: AllLogDirs]
@@ -100,11 +100,11 @@ TypeOK ==
     /\
         /\ DOMAIN bMetadata \subseteq AllPartitions
         /\ \A partition \in DOMAIN bMetadata : bMetadata[partition] \in AllLogDirs \union {None}
-    /\ bOffline \subseteq AllLogDirs
+    /\ bOnline \subseteq AllLogDirs
     /\
         /\ DOMAIN cAssignments \subseteq AllPartitions
         /\ \A partition \in DOMAIN cAssignments : cAssignments[partition] \in AllLogDirs \union {None}
-    /\ cOffline \subseteq AllLogDirs
+    /\ cOnline \subseteq AllLogDirs
     /\ cUpdated \subseteq AllPartitions
 
 Init ==
@@ -114,9 +114,9 @@ Init ==
     /\ bLogDirs = [dir \in { "dir" \o (ToString(idx)) : idx \in 1..NumLogDirs } |-> {}]
     /\ bPending = {}
     /\ bMetadata = EmptyAssignments
-    /\ bOffline = {}
+    /\ bOnline = AllLogDirs
     /\ cAssignments = EmptyAssignments
-    /\ cOffline = {}
+    /\ cOnline = AllLogDirs
     /\ cUpdated = {}
 
 \* Controller behavior
@@ -128,21 +128,21 @@ CHandleAssignReplicasToDirsRpc ==
         ) @@ cAssignments
     \* publish the updated partition metadata records with the new assigned logDirs
     /\ mNewRecords' = mNewRecords \o Set2Seq({ [partition |-> a.partition, logDir |-> a.logDir] : a \in mInflightAssignments })
-    /\ cUpdated' = cUpdated \union { a.partition : a \in { a \in mInflightAssignments : a.logDir \in cOffline} }
+    /\ cUpdated' = cUpdated \union { a.partition : a \in { a \in mInflightAssignments : a.logDir \notin cOnline } }
     /\ mInflightAssignments' = {} \* clear the inflight request
-    /\ UNCHANGED <<mInflightFailures, bOffline, bLogDirs, bPending, bMetadata, cOffline>>
+    /\ UNCHANGED <<mInflightFailures, bOnline, bLogDirs, bPending, bMetadata, cOnline>>
 CHandleLogDirFailureNotification ==
     /\ mInflightFailures # {} \* precondition: there is a log dir failure notification in flight
     /\ cUpdated' = cUpdated \union { p \in DOMAIN cAssignments : cAssignments[p] \in mInflightFailures }
-    /\ cOffline' = cOffline \union mInflightFailures
+    /\ cOnline' = cOnline \ mInflightFailures
     /\ mInflightFailures' = {} \* clear the inflight request
-    /\ UNCHANGED <<mInflightAssignments, mNewRecords, bOffline, bLogDirs, bPending, bMetadata, cAssignments>>
+    /\ UNCHANGED <<mInflightAssignments, mNewRecords, bOnline, bLogDirs, bPending, bMetadata, cAssignments>>
 CHandleUserCreatePartitionRpc ==
     /\ Cardinality(DOMAIN cAssignments) < MaxPartitions
     /\ LET partition == "p" \o (ToString(Cardinality(DOMAIN cAssignments) + 1))
        IN   /\ cAssignments' = [ p \in {partition} |-> None ] @@ cAssignments
             /\ mNewRecords' = Append(mNewRecords, [partition |-> partition, logDir |-> None])
-    /\ UNCHANGED <<mInflightAssignments, mInflightFailures, bOffline, bLogDirs, bPending, bMetadata, cOffline, cUpdated>>
+    /\ UNCHANGED <<mInflightAssignments, mInflightFailures, bOnline, bLogDirs, bPending, bMetadata, cOnline, cUpdated>>
 CNext ==
     \/ CHandleUserCreatePartitionRpc
     \/ CHandleAssignReplicasToDirsRpc
@@ -152,12 +152,11 @@ CNext ==
 BFetchMetadata ==
     /\ Len(mNewRecords) > 0                         \* precondition: there are new partition records
     /\ LET assignment == Head(mNewRecords) IN       \* process one at a time
-        /\ IF assignment.logDir = None /\ Cardinality(bOffline) < NumLogDirs THEN
+        /\ IF assignment.logDir = None /\ Cardinality(bOnline) > 0 THEN
               LET
                 replica == Head(mNewRecords).partition   \* process one at a time
-                onlineLogDirs == (DOMAIN bLogDirs) \ bOffline
-                logDir == CHOOSE logDir \in onlineLogDirs :      \* select the least loaded logDir
-                    \A otherlogDir \in onlineLogDirs :
+                logDir == CHOOSE logDir \in bOnline :    \* select the least loaded logDir
+                    \A otherlogDir \in bOnline :
                         Cardinality(bLogDirs[logDir]) \leq Cardinality(bLogDirs[otherlogDir])
               IN /\ bLogDirs' = [bLogDirs EXCEPT ![logDir] = @ \union {replica}  ]           \* create the replica in the selected logDir
                  /\ bPending' = bPending \union {[partition |-> replica, logDir |-> logDir]} \* register the assingment, pending to be sent to the Controller
@@ -165,21 +164,21 @@ BFetchMetadata ==
                 /\ bPending' = bPending
         /\ bMetadata' = [ a \in {assignment.partition} |-> assignment.logDir ] @@ bMetadata
     /\ mNewRecords' = Tail(mNewRecords)
-    /\ UNCHANGED <<mInflightAssignments, mInflightFailures, bOffline, cAssignments, cOffline, cUpdated>>
+    /\ UNCHANGED <<mInflightAssignments, mInflightFailures, bOnline, cAssignments, cOnline, cUpdated>>
 BCallAssignReplicasToDirsRpc ==
     /\ bPending # {} \* precondition: there are pending assignments to send
     /\ mInflightAssignments = {} \* precondition: no request in flight
     /\ mInflightAssignments' = bPending
     /\ bPending' = {}
-    /\ UNCHANGED <<mInflightFailures, mNewRecords, bLogDirs, bOffline, bMetadata, cAssignments, cOffline, cUpdated>>
+    /\ UNCHANGED <<mInflightFailures, mNewRecords, bLogDirs, bOnline, bMetadata, cAssignments, cOnline, cUpdated>>
 BFailLogDir ==
-    /\ Cardinality(bOffline) < NumLogDirs \* precondition: not all logDirs are offline
+    /\ Cardinality(bOnline) > 0 \* precondition: some logDir is still online
     /\ LET
-            logDir == CHOOSE logDir \in DOMAIN bLogDirs: logDir \notin  bOffline
+            logDir == CHOOSE logDir \in DOMAIN bLogDirs: logDir \in  bOnline
        IN
-        /\ bOffline' = bOffline \union {logDir}
+        /\ bOnline' = bOnline \ {logDir}
         /\ mInflightFailures' = mInflightFailures \union {logDir}
-    /\ UNCHANGED <<mInflightAssignments, mNewRecords, bLogDirs, bMetadata, cAssignments, cOffline, cUpdated, bPending>>
+    /\ UNCHANGED <<mInflightAssignments, mNewRecords, bLogDirs, bMetadata, cAssignments, cOnline, cUpdated, bPending>>
 BNext ==
     \/ BFetchMetadata
     \/ BCallAssignReplicasToDirsRpc
@@ -199,7 +198,7 @@ UpdatesOnlyOfflinePartitions ==
     \* cUpdated represents the set of partitions which the controller has deemed in
     \* need of a leadership and ISR update *due to a logdir failure*, so these
     \* should only include partitions which exist in offline logdirs
-    \A partition \in cUpdated : \E logDir \in bOffline : partition \in bLogDirs[logDir]
+    \A partition \in cUpdated : \E logDir \in AllLogDirs \ bOnline : partition \in bLogDirs[logDir]
 
 BrokerHoldsPartitionsInASingleLogDir ==
     \* A partition cannot be hosted in more than one log dir
@@ -217,10 +216,10 @@ AlwaysEventuallyControllerKnowsAssignments ==
 AlwaysEventuallyBrokerCatchesUpWithMetadataAssignments ==
     \* The Broker's view of the assignments is always eventually updated
     []<> (cAssignments = bMetadata)
-AlwaysEventuallyAllLogDirsGoOffline == []<> (Cardinality(bOffline) = NumLogDirs)
-AlwaysEventuallyControllerKnowsAllOfflineLogDirs == []<> (Cardinality(cOffline) = Cardinality(bOffline))
+AlwaysEventuallyAllLogDirsGoOffline == []<> (Cardinality(bOnline) = 0)
+AlwaysEventuallyControllerKnowsAllOfflineLogDirs == []<> (Cardinality(cOnline) = Cardinality(bOnline))
 AlwaysEventuallyAnyOfflineReplicaGetsLeadershipUpdate ==
-    []<> LET offlineReplicas == UNION {{replica : replica \in bLogDirs[logDir]} : logDir \in bOffline}
+    []<> LET offlineReplicas == UNION {{replica : replica \in bLogDirs[logDir]} : logDir \in AllLogDirs \ bOnline}
     IN offlineReplicas = cUpdated
 
 =============================================================================
